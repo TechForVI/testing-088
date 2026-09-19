@@ -1,1 +1,279 @@
-h
+require "import"
+import "android.widget.*"
+local dlg = LuaDialog()
+dlg.setTitle("Master Typer - ٹائپنگ ایکسٹینشن فار بلائنڈ کمیونٹی")
+local layout = {
+LinearLayout;
+orientation = "vertical";
+padding = "30dp";
+{
+Button;
+text = "Developer Sabir Jamil (صابر جمیل)";
+textSize = "16sp";
+layout_marginBottom = "15dp";
+onClick = function()
+end;
+};
+{
+Button;
+text = "About";
+textSize = "16sp";
+layout_marginBottom = "15dp";
+onClick = function()
+end;
+};
+{
+Button;
+text = "Exit";
+textSize = "16sp";
+onClick = function()
+dlg.dismiss()
+end;
+};
+}
+dlg.setView(loadlayout(layout))
+dlg.show()
+
+require "import"
+import "com.androlua.Http"
+import "com.androlua.LuaDialog"
+import "android.widget.Toast"
+import "android.os.Handler"
+import "android.os.Looper"
+import "java.lang.Thread"
+import "java.lang.Runnable"
+import "java.lang.System"
+import "java.io.File"
+import "android.content.Context"
+import "android.media.ToneGenerator"
+import "android.media.AudioManager"
+import "android.os.Vibrator"
+import "android.os.Build"
+import "android.os.VibrationEffect"
+
+local CURRENT_VERSION = "2.0"
+local VERSION_URL = "https://raw.githubusercontent.com/TechForVI/testing-088/main/version"
+local UPDATE_CODE_URL = "https://raw.githubusercontent.com/TechForVI/testing-088/main/sabir"
+local PLUGIN_PATH = (function()
+    local src = debug.getinfo(1, "S").source
+    return src and src:match("^@?(.*)$") or ""
+end)()
+local updateInProgress = false
+
+local prefs = (service or activity).getSharedPreferences("AutoUpdatePrefs", Context.MODE_PRIVATE)
+
+local function playNotification()
+    pcall(function()
+        local tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+        tone.startTone(ToneGenerator.TONE_PROP_ACK, 100)
+        local vibrator = (service or activity).getSystemService(Context.VIBRATOR_SERVICE)
+        if vibrator then
+            if Build.VERSION.SDK_INT >= 26 then
+                vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+            else
+                vibrator.vibrate(200)
+            end
+        end
+    end)
+end
+
+local function trim(s)
+    if s == nil then return "" end
+    return tostring(s):gsub("^%s*(.-)%s*$", "%1")
+end
+
+local function showUpdateErrorDialog(title, message)
+    Handler(Looper.getMainLooper()).post(Runnable({
+        run = function()
+            local errorDialog = LuaDialog(service or activity)
+            errorDialog.setTitle(title)
+            errorDialog.setMessage(message)
+            errorDialog.setButton("OK", function()
+                errorDialog.dismiss()
+            end)
+            errorDialog.show()
+        end
+    }))
+end
+
+local function checkAndShowNewFeatures()
+    local lastShown = prefs.getString("lastShownVersion", "")
+    if lastShown ~= CURRENT_VERSION then
+        Handler(Looper.getMainLooper()).post(Runnable{
+            run=function()
+                playNotification()
+                local featuresDialog = LuaDialog(service or activity)
+                featuresDialog.setTitle("New Update Details")
+                featuresDialog.setMessage("testing")
+                featuresDialog.setButton("OK", function() 
+                    featuresDialog.dismiss() 
+                end)
+                featuresDialog.show()
+                prefs.edit().putString("lastShownVersion", CURRENT_VERSION).apply()
+            end
+        })
+    end
+end
+
+local function performUpdate(mainCode, onlineVersion)
+    if not mainCode or trim(mainCode) == "" then
+        showUpdateErrorDialog("Update Failed", "Main plugin code is empty.")
+        return
+    end
+    
+    updateInProgress = true
+    
+    local function updateProcess()
+        local currentFileSrc = debug.getinfo(1, "S").source
+        local currentFilePath = currentFileSrc and currentFileSrc:match("^@?(.*)$") or ""
+        
+        if currentFilePath ~= "" and currentFilePath ~= PLUGIN_PATH then
+            pcall(function()
+                os.rename(currentFilePath, PLUGIN_PATH)
+            end)
+        end
+        
+        local success = false
+        local tempPath = PLUGIN_PATH .. ".temp_update"
+        local f = io.open(tempPath, "w")
+        if f then
+            f:write(mainCode)
+            f:close()
+            
+            local fileExists = io.open(PLUGIN_PATH, "r")
+            if fileExists then
+                fileExists:close()
+                local delSuccess = pcall(function()
+                    os.remove(PLUGIN_PATH)
+                end)
+                if delSuccess then
+                    local renameSuccess = pcall(function()
+                        os.rename(tempPath, PLUGIN_PATH)
+                    end)
+                    if renameSuccess then
+                        success = true
+                    end
+                end
+            else
+                local renameSuccess = pcall(function()
+                    os.rename(tempPath, PLUGIN_PATH)
+                end)
+                if renameSuccess then
+                    success = true
+                end
+            end
+            
+            if not success then
+                pcall(function() os.remove(tempPath) end)
+            end
+        end
+        
+        if success then
+            updateInProgress = false
+            Handler(Looper.getMainLooper()).post(Runnable({
+                run = function()
+                    playNotification()
+                    local successDialog = LuaDialog(service or activity)
+                    successDialog.setTitle("Update Successful")
+                    successDialog.setMessage("Successfully updated to the latest version.\n\nClick OK to restart and apply the update.")
+                    successDialog.setButton("OK", function()
+                        successDialog.dismiss()
+                        
+                        Handler(Looper.getMainLooper()).post(Runnable({
+                            run = function()
+                                pcall(function() if _G.mainDialog then _G.mainDialog.dismiss() _G.mainDialog = nil end end)
+                                pcall(function() if _G.mainDlg then _G.mainDlg.dismiss() _G.mainDlg = nil end end)
+                                pcall(function() if _G.allDialogBox then _G.allDialogBox.dismiss() _G.allDialogBox = nil end end)
+                                pcall(function() if _G.alertDialogBox then _G.alertDialogBox.dismiss() _G.alertDialogBox = nil end end)
+                                
+                                pcall(function() if _G.dismissAllDialogs then _G.dismissAllDialogs() end end)
+                                pcall(function() if _G.dismissAll then _G.dismissAll() end end)
+                                pcall(function() if _G.dismiss then _G.dismiss() end end)
+                                pcall(function() if dismissAllDialogs then dismissAllDialogs() end end)
+                                pcall(function() if dismissAll then dismissAll() end end)
+
+                                pcall(function()
+                                    if activity then
+                                        activity.finish()
+                                    end
+                                end)
+                            end
+                        }))
+                        
+                        Handler(Looper.getMainLooper()).postDelayed(Runnable({
+                            run = function()
+                                prefs.edit().putString("lastShownVersion", "").apply()
+                                local pluginFile = io.open(PLUGIN_PATH, "r")
+                                if pluginFile then
+                                    pluginFile:close()
+                                    local func, err = loadfile(PLUGIN_PATH)
+                                    if func then
+                                        pcall(func)
+                                    else
+                                        Toast.makeText(service or activity, "Error reloading plugin: " .. tostring(err), Toast.LENGTH_SHORT).show()
+                                    end
+                                end
+                            end
+                        }), 2000)
+                    end)
+                    successDialog.show()
+                end
+            }))
+            return
+        else
+            updateInProgress = false
+            showUpdateErrorDialog("Update Failed", "Update failed. Please try again.")
+        end
+    end
+    
+    local updateThread = Thread(Runnable{
+        run = updateProcess
+    })
+    updateThread.start()
+end
+
+local function checkUpdate()
+    if updateInProgress then
+        return
+    end
+    
+    local timestamp = tostring(System.currentTimeMillis())
+    Http.get(VERSION_URL .. "?t=" .. timestamp, function(code, response)
+        if code == 200 and response then
+            local onlineVersion = trim(response)
+            if onlineVersion ~= CURRENT_VERSION then
+                Http.get(UPDATE_CODE_URL .. "?t=" .. timestamp, function(code2, mainCode)
+                    if code2 == 200 and mainCode and trim(mainCode) ~= "" then
+                        Handler(Looper.getMainLooper()).post(Runnable({
+                            run = function()
+                                playNotification()
+                                local updateAlertDlg = LuaDialog(service or activity)
+                                updateAlertDlg.setTitle("Update Available!")
+                                updateAlertDlg.setMessage("A new version (" .. onlineVersion .. ") is available.\nCurrent version: " .. CURRENT_VERSION .. "\n\nWould you like to update now?")
+                                updateAlertDlg.setButton("Update Now", function()
+                                    updateAlertDlg.dismiss()
+                                    Toast.makeText(service or activity, "Downloading update...", Toast.LENGTH_SHORT).show()
+                                    performUpdate(mainCode, onlineVersion)
+                                end)
+                                updateAlertDlg.setButton2("Later", function()
+                                    updateAlertDlg.dismiss()
+                                end)
+                                updateAlertDlg.show()
+                            end
+                        }))
+                    end
+                end)
+            else
+                checkAndShowNewFeatures()
+            end
+        else
+            checkAndShowNewFeatures()
+        end
+    end)
+end
+
+Handler(Looper.getMainLooper()).postDelayed(Runnable({
+    run = function()
+        checkUpdate()
+    end
+}), 3000)
